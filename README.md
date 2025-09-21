@@ -1,5 +1,5 @@
 # RustyRansom - Proof of Concept
-A simple but efficient ransomware written in Rust
+A simple but efficient ransomware written in Rust.
 It searches for files recursively within the main user directories: desktop, documents, downloads and pictures.
 
 ## Features
