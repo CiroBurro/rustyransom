@@ -1464,7 +1464,9 @@ name = "rustyransom"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
+ "base64",
  "dirs2",
+ "flate2",
  "pgp",
  "rayon",
  "zeroize",

