@@ -4,19 +4,19 @@ It demonstrates advanced cryptographic implementation and system-level programmi
 
 ## Key Features
 
-### 🔒 Advanced Cryptography (Hybrid Scheme)
+### Advanced Cryptography (Hybrid Scheme)
 - **Hybrid Encryption Architecture**: Utilizes a robust combination of asymmetric (PGP) and symmetric (AES-256) encryption.
   - **AES-256-GCM (Stream Mode)**: Used for file encryption. Ensures confidentiality and integrity (Authenticated Encryption).
   - **PGP/RSA**: Protects the randomly generated symmetric session key. Only the holder of the private key can decrypt the recovery file.
 - **Secure Key Management**: Session keys are zeroed out in memory immediately after use (`zeroize` crate) to prevent cold-boot attacks or memory dumps.
 - **Obfuscation**: The embedded public key is Gzip-compressed and Base64-encoded to hinder static analysis.
 
-### ⚡ High Performance & Reliability
+### High Performance & Reliability
 - **Streaming Encryption**: Implements `AES-GCM` in stream mode with 4KB chunking. This allows encryption of arbitrarily large files (GBs/TBs) with minimal and constant RAM usage (preventing OOM crashes).
 - **Parallel Processing**: leverages `Rayon` for multi-threaded filesystem traversal and encryption, maximizing CPU utilization.
 - **Error Resilience**: Robust error handling ensures that locked or inaccessible files do not crash the payload, allowing the operation to continue uninterrupted.
 
-### 💀 Cross-Platform Persistence
+### Cross-Platform Persistence
 - **Linux**: Auto-installs as a user-level `systemd` service (`~/.config/systemd/user/`) for persistence across reboots without requiring root privileges.
 - **Windows**: (Conditional Compilation) Modifies the Registry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) to execute on user login.
 
