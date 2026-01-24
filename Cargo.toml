@@ -11,3 +11,6 @@ pgp = "0.18.0"
 zeroize = "1.8.2"
 flate2 = "1.1.8"
 base64 = "0.22.1"
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55.0"
