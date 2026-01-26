@@ -1,0 +1,125 @@
+:root {
+    --bg-color: #0f172a;       /* Slate 900 - Sfondo profondo */
+    --card-bg: #1e293b;        /* Slate 800 - Colore della card */
+    --text-primary: #f1f5f9;   /* Slate 100 - Testo principale */
+    --text-secondary: #94a3b8; /* Slate 400 - Etichette */
+    --accent-color: #38bdf8;   /* Sky 400 - Accento ciano/blu */
+    --border-color: #334155;   /* Slate 700 */
+    --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+/* Container principale centrato (Card) */
+main, header.error-container {
+    background-color: var(--card-bg);
+    padding: 2.5rem;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    width: 90%;
+    max-width: 500px;
+    border: 1px solid var(--border-color);
+}
+
+/* Header all'interno della card */
+header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.025em;
+}
+
+p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+/* Tabella Dati */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    text-align: left;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+th:last-child {
+    text-align: right;
+}
+
+td {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border-color);
+    font-variant-numeric: tabular-nums; /* Allinea bene i numeri */
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+td:first-child {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+td:last-child {
+    text-align: right;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+}
+
+/* Stili specifici per 404 */
+a.button {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--accent-color);
+    color: var(--bg-color);
+    text-decoration: none;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: opacity 0.2s;
+}
+
+a.button:hover {
+    opacity: 0.9;
+}
+
+/* Link generici */
+a {
+    color: var(--accent-color);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}

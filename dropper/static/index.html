@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="2">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SysGuard Monitor</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <main>
+        <header>
+            <h1>SysGuard</h1>
+            <p>Live System Monitoring</p>
+        </header>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Host Uptime</td>
+                    <td>{{.Uptime}}</td>
+                </tr>
+                <tr>
+                    <td>CPU Usage</td>
+                    <td>{{printf "%.2f" .CpuUsage}}%</td>
+                </tr>
+                <tr>
+                    <td>CPU Temp</td>
+                    <td>{{.CpuTemp}}°C</td>
+                </tr>
+                <tr>
+                    <td>GPU Usage</td>
+                    <td>{{printf "%.2f" .GpuUsage}}%</td>
+                </tr>
+                <tr>
+                    <td>GPU Temp</td>
+                    <td>{{.GpuTemp}}°C</td>
+                </tr>
+                <tr>
+                    <td>RAM Usage</td>
+                    <td>{{printf "%.2f" .MemUsage}}%</td>
+                </tr>
+            </tbody>
+        </table>
+    </main>
+
+</body>
+</html>

@@ -31,6 +31,37 @@ The project is modularized for maintainability:
 - `src/encryption.rs`: Core streaming encryption logic and nonce management.
 - `src/persistence.rs`: OS-specific persistence mechanisms (Linux Systemd / Windows Registry).
 - `src/recovery.rs`: PGP-based session key protection and recovery file generation.
+- `dropper/`: Go-based cross-platform dropper with TUI and web server modes
+
+## Dropper Architecture
+The dropper is a separate [Go application](https://github.com/CiroBurro/SysGuard) that deploys the Rust ransomware payload:
+- **Payload Encoding**: Rust binary is Gzip-compressed and Base64-encoded, then embedded in Go source
+- **Platform-Specific Deployment**:
+  - **Linux**: Decodes to `/usr/share/rustyransom` with 0755 permissions (no extension)
+  - **Windows**: Decodes to `%PUBLIC%\rustyransom.exe`
+- **Execution Modes**:
+  - **TUI Mode** (default): Interactive terminal UI using charmbracelet/bubbletea
+  - **Server Mode** (`-server`): Web server displaying system information
+- **Asynchronous**: Dropper runs in background goroutine while UI distracts user
+
+## Self-Protection Mechanisms
+To prevent operational failures, the ransomware includes multiple self-protection layers:
+
+### Extension Blacklist
+Files with these extensions are NEVER encrypted:
+- `.key` - Recovery key file
+- `.ciro` - Already encrypted files
+- `.exe`, `.dll`, `.sys` - Windows executables/libraries
+- `.so`, `.ko` - Linux shared libraries/kernel modules
+
+### Self-Executable Detection
+Uses canonical path comparison to prevent encrypting the ransomware binary itself:
+- Resolves symlinks and relative paths
+- Compares against `env::current_exe()`
+- Protects both `rustyransom` (Linux) and `rustyransom.exe` (Windows)
+
+### No-Extension Protection
+Files without extensions are automatically skipped (protects Linux binaries like `/bin/ls`, `./rustyransom`)
 
 ## Disclaimer
 **DISCLAIMER: This software is for EDUCATIONAL PURPOSES ONLY.**

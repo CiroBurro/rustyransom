@@ -1,1 +1,27 @@
-/target
+# Rust
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# Go
+dropper/dropper_linux
+dropper/dropper_windows
+dropper/dropper_windows.exe
+*.exe
+!target/**/*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.log
