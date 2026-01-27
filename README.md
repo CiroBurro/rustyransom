@@ -5,11 +5,19 @@ It demonstrates advanced cryptographic implementation and system-level programmi
 ## Key Features
 
 ### Advanced Cryptography (Hybrid Scheme)
-- **Hybrid Encryption Architecture**: Utilizes a robust combination of asymmetric (PGP) and symmetric (AES-256) encryption.
+- **Hybrid Encryption Architecture**: Utilizes a robust combination of asymmetric (OpenPGP) and symmetric (AES-256) encryption.
   - **AES-256-GCM (Stream Mode)**: Used for file encryption. Ensures confidentiality and integrity (Authenticated Encryption).
-  - **PGP/RSA**: Protects the randomly generated symmetric session key. Only the holder of the private key can decrypt the recovery file.
+  - **OpenPGP**: Protects the randomly generated symmetric session key. Only the holder of the private key can decrypt the recovery file.
+    - Supports both RSA and elliptic curve keys (Ed25519, Cv25519)
+    - Uses `sequoia-openpgp` for modern OpenPGP implementation with `StandardPolicy` validation
 - **Secure Key Management**: Session keys are zeroed out in memory immediately after use (`zeroize` crate) to prevent cold-boot attacks or memory dumps.
 - **Obfuscation**: The embedded public key is Gzip-compressed and Base64-encoded to hinder static analysis.
+
+### Multi-Session Recovery System
+- **Progressive Key Management**: Each execution generates a unique recovery file with sequential indexing (`recovery_file_0.key`, `recovery_file_1.key`, etc.)
+- **File-to-Key Mapping**: Encrypted files are tagged with their session key index (e.g., `document_0.txt.ciro`, `photo_1.jpg.ciro`)
+- **Resumable Operations**: Marker file system prevents re-execution after encryption completes
+- **No Key Overwriting**: Multiple sessions preserve all previous recovery keys, ensuring files from interrupted sessions remain recoverable
 
 ### High Performance & Reliability
 - **Streaming Encryption**: Implements `AES-GCM` in stream mode with 4KB chunking. This allows encryption of arbitrarily large files (GBs/TBs) with minimal and constant RAM usage (preventing OOM crashes).
@@ -21,16 +29,17 @@ It demonstrates advanced cryptographic implementation and system-level programmi
 - **Windows**: (Conditional Compilation) Modifies the Registry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) to execute on user login.
 
 ## Technical Architecture
-- **Encryption Engine**: `aes-gcm` (Stream primitive with `EncryptorBE32` for nonce/counter management).
+- **Encryption Engine**: `aes-gcm` (Stream primitive with `EncryptorBE32` for 7-byte nonce + 4-byte counter management).
 - **Concurrency**: `rayon` for parallel iterator bridges.
 - **System Integration**: `dirs2` for path resolution, `winreg` (Windows) and standard I/O for system interactions.
+- **Session Management**: Marker file system (`~/.local/share/marker`) prevents re-execution after completion.
 
 ## Structure
 The project is modularized for maintainability:
-- `src/main.rs`: Entry point and orchestration.
-- `src/encryption.rs`: Core streaming encryption logic and nonce management.
+- `src/main.rs`: Entry point and orchestration with multi-session recovery key management.
+- `src/encryption.rs`: Core streaming encryption logic with 7-byte nonce management and file tagging.
 - `src/persistence.rs`: OS-specific persistence mechanisms (Linux Systemd / Windows Registry).
-- `src/recovery.rs`: PGP-based session key protection and recovery file generation.
+- `src/recovery.rs`: OpenPGP-based session key protection and progressive recovery file generation using `sequoia-openpgp`.
 - `dropper/`: Go-based cross-platform dropper with TUI and web server modes
 
 ## Dropper Architecture
@@ -49,10 +58,13 @@ To prevent operational failures, the ransomware includes multiple self-protectio
 
 ### Extension Blacklist
 Files with these extensions are NEVER encrypted:
-- `.key` - Recovery key file
+- `.key` - Recovery key files
 - `.ciro` - Already encrypted files
 - `.exe`, `.dll`, `.sys` - Windows executables/libraries
 - `.so`, `.ko` - Linux shared libraries/kernel modules
+- `.service`, `.desktop` - Linux systemd/desktop files
+- `.conf`, `.cfg`, `.ini` - Configuration files
+- `.gpg` - GPG encrypted files
 
 ### Self-Executable Detection
 Uses canonical path comparison to prevent encrypting the ransomware binary itself:

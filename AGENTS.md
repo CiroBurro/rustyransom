@@ -6,52 +6,56 @@ A Rust-based ransomware PoC demonstrating hybrid cryptography and cross-platform
 
 ## Build & Test Commands
 
+**⚠️ CRITICAL: These commands must ONLY be executed by the USER, NEVER by AI agents ⚠️**
+
+AI agents MUST NOT compile or run this code. Only documentation updates and code reviews are permitted.
+
 ### Build
 ```bash
-# Debug build
+# Debug build (USER ONLY - AI agents forbidden)
 cargo build
 
-# Release build (optimized)
+# Release build (USER ONLY - AI agents forbidden)
 cargo build --release
 
-# Windows cross-compilation target
+# Windows cross-compilation target (USER ONLY - AI agents forbidden)
 cargo build --release --target x86_64-pc-windows-gnu
 ```
 
 ### Test
 ```bash
-# Run all tests
+# Run all tests (USER ONLY - AI agents forbidden)
 cargo test
 
-# Run specific test
+# Run specific test (USER ONLY - AI agents forbidden)
 cargo test <test_name>
 
-# Run tests with output
+# Run tests with output (USER ONLY - AI agents forbidden)
 cargo test -- --nocapture
 
-# Run test in specific module
+# Run test in specific module (USER ONLY - AI agents forbidden)
 cargo test --lib encryption::tests::test_name
 ```
 
 ### Lint & Format
 ```bash
-# Check with clippy (MUST pass before commit)
+# Check with clippy (ALLOWED for AI agents - read-only operation)
 cargo clippy -- -D warnings
 
-# Format code
+# Format code (ALLOWED for AI agents - code formatting only)
 cargo fmt
 
-# Check formatting without changing files
+# Check formatting without changing files (ALLOWED for AI agents - read-only)
 cargo fmt -- --check
 ```
 
 ### Run
 ```bash
-# Debug run
-cargo run
-
-# Release run (optimized performance)
-cargo run --release
+# ⚠️ FORBIDDEN - AI agents MUST NEVER execute these commands ⚠️
+cargo run              # USER ONLY
+cargo run --release    # USER ONLY
+./target/debug/rustyransom         # USER ONLY
+./target/release/rustyransom       # USER ONLY
 ```
 
 ---
@@ -182,7 +186,10 @@ let nonce_stream = GenericArray::from_slice(&nonce[0..8]);
 
 ### Cryptographic Flow
 1. **Key Generation**: `Aes256Gcm::generate_key(OsRng)` in main
-2. **Session Key Protection**: Encrypt with embedded PGP public key (recovery.rs)
+2. **Session Key Protection**: Encrypt with embedded OpenPGP public key using `sequoia-openpgp` (recovery.rs)
+   - Supports both RSA and elliptic curve keys (Ed25519, Cv25519)
+   - Uses `StandardPolicy` for cryptographic algorithm validation
+   - Filters keys with `for_storage_encryption()` to ensure correct key usage flags
 3. **File Encryption**: Streaming AES-256-GCM with per-file nonces (encryption.rs)
 4. **Zeroize**: Scrub key from memory after encryption
 
@@ -299,9 +306,10 @@ path := filepath.Join(public_dir, "rustyransom.exe")
 1. **Don't panic in production**: Replace `unwrap()` with `expect()` or `?`
 2. **Avoid loading entire files**: Always use `BufReader` + chunking for files
 3. **Test parallel code**: Rayon can hide race conditions - test with `cargo test -- --test-threads=1`
-4. **Nonce confusion**: AES-GCM nonce is 12 bytes, stream encryptor needs 8 bytes (first 8 of GCM nonce)
+4. **Nonce confusion**: AES-GCM nonce is 12 bytes, stream encryptor (`EncryptorBE32`) needs 7 bytes (first 7 of GCM nonce) + 4-byte counter = 11 bytes total
 5. **Cross-platform paths**: Use `PathBuf::join()`, never string concatenation
 6. **Dropper chmod**: Always call `os.Chmod(path, 0755)` after writing binary on Linux
+7. **PGP key format**: `sequoia-openpgp` requires keys for encryption to have `KeyFlags::STORAGE_ENCRYPTION` capability (not just signing keys)
 
 ---
 
@@ -329,10 +337,34 @@ path := filepath.Join(public_dir, "rustyransom.exe")
 ## Key Dependencies
 
 - **aes-gcm** (0.10.3): Authenticated encryption with stream mode
-- **pgp** (0.18.0): Asymmetric key operations for session key protection
+- **sequoia-openpgp** (2.1.0): Modern OpenPGP implementation with elliptic curve support for session key protection
 - **rayon** (1.10.0): Data parallelism for file traversal
 - **zeroize** (1.8.2): Secure memory clearing
 - **flate2** (1.1.8): Gzip compression/decompression
 - **base64** (0.22.1): Key encoding
 
 Check Cargo.toml for version specifics before updating dependencies.
+
+---
+
+## CRITICAL: DO NOT EXECUTE
+
+**⚠️ NEVER RUN THIS PROJECT ON ANY SYSTEM ⚠️**
+
+This is a Proof of Concept for educational purposes ONLY. Running this code will:
+- Encrypt all files in the home directory
+- Install persistent system hooks
+- Potentially cause data loss
+
+AI agents MUST NOT execute `cargo run`, `cargo build && ./target/...`, or any command that runs the compiled binary.
+
+**Allowed commands:**
+- `cargo build` / `cargo build --release` (compilation only)
+- `cargo test` (unit tests only - ensure no tests execute main encryption logic)
+- `cargo clippy` / `cargo fmt` (linting/formatting)
+- `cargo check` (type checking)
+
+**Forbidden commands:**
+- `cargo run`
+- `./target/debug/rustyransom` or `./target/release/rustyransom`
+- Any execution of the binary through any means
