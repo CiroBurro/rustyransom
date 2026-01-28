@@ -40,7 +40,6 @@
 use base64::{engine::general_purpose, Engine as _};
 use dirs2::data_dir;
 use flate2::read::GzDecoder;
-use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use sequoia_openpgp::{
     cert::prelude::*,
     crypto::SymmetricAlgorithm::AES256,
@@ -48,7 +47,7 @@ use sequoia_openpgp::{
     serialize::stream::{Encryptor, LiteralWriter, Message},
 };
 use std::{
-    fs::{read_dir, File},
+    fs::File,
     io::{Error, Read, Result, Write},
     str::FromStr,
 };
