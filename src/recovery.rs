@@ -92,7 +92,6 @@ pub const PUB_KEY_ENCODED: &str = r#"H4sIAAAAAAAAA32SS5OiMBSF9/kV7q0u6B5AXMwiCUl
 /// # Errors
 ///
 /// - `Failed to decode public key` - Base64 decoding failed (corrupted `PUB_KEY_ENCODED`)
-/// - `Failed to convert decoded public key to string` - Invalid UTF-8 after Base64 decode
 /// - `Failed to unzip public key` - Gzip decompression failed
 /// - `Failed to read pgp cert from string` - OpenPGP certificate parsing failed
 /// - `Failed to build encryptor` - OpenPGP encryption operation setup failed
@@ -119,12 +118,8 @@ pub fn save_key(key: Vec<u8>, key_count: usize) -> Result<()> {
         .decode(PUB_KEY_ENCODED)
         .map_err(|_| Error::other("Failed to decode public key"))?;
 
-    // Convert decoded bytes to UTF-8 string (Gzip format is binary-safe)
-    let decoded_key_str = String::from_utf8(decoded_key)
-        .map_err(|_| Error::other("Failed to convert decoded public key to string"))?;
-
-    // Decompress Gzip-encoded public key
-    let mut gz = GzDecoder::new(decoded_key_str.as_bytes());
+    // Decompress Gzip-encoded public key (binary data, not UTF-8 string)
+    let mut gz = GzDecoder::new(decoded_key.as_slice());
     let mut unzipped_key = String::new();
     gz.read_to_string(&mut unzipped_key)
         .map_err(|_| Error::other("Failed to unzip public key"))?;
