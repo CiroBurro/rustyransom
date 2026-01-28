@@ -10,7 +10,7 @@ rayon = "1.10.0"
 zeroize = "1.8.2"
 flate2 = "1.1.8"
 base64 = "0.22.1"
-sequoia-openpgp = "2.1.0"
+sequoia-openpgp = { version = "2.1.0", default-features = false, features = ["crypto-rust", "allow-experimental-crypto", "allow-variable-time-crypto"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"
